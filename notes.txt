@@ -1,0 +1,8 @@
+2017/12/11
+try to use \input{sec1_introduction}  (which will include the sec1 tex file)
+in sec1_introduction, you can start with \section{ΩÈ…‹}
+
+\textbf{Side-Channel Attacks.} Side-channel attacks (SCA) are ....
+
+The current pdf shows a translation where the English paragraphy is followed by a Chinese one.
+please give one more pdf file where an entire Chinese version first followed by the original english version (combined ).

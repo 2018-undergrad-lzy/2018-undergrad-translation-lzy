@@ -1,0 +1,74 @@
+\documentclass[oneside]{cctart}
+%\usepackage{amsmath,headrule,vatola,amssymb}
+\usepackage{amsmath,amssymb}
+%\usepackage{graphicx,epstopdf,epsfig,multirow,emlines,epic,bm}
+\usepackage{graphicx,epstopdf,epsfig,multirow,epic,bm}
+\usepackage[raggedright]{titlesec}
+%add by zf
+\usepackage{color, soul}
+\newcommand{\highlight}{\hl}
+%\usepackage{amsmath}
+
+
+%\documentstyle[twoside, headrule, graphicx, epsfig, emlines, amssymb,amsmath,epic]{carticle}
+%\input cchead.sty
+%\input vatola.sty
+
+\headsep 0.5  cm \topmargin 0pt \oddsidemargin 0pt
+\evensidemargin 0pt
+\textheight 20.5  cm \textwidth 14  cm
+%\setlength{\unitlength}{1mm}
+
+\renewcommand\sectionname{\arabic{section}}
+\renewcommand\sectionformat{\centering}
+\renewcommand\subsectionname{\arabic{section}.\arabic{subsection}}
+\renewcommand\subsectionformat{}
+\renewcommand\subsubsectionname{\arabic{section}.\arabic{subsection}.\arabic{subsubsection}}
+\renewcommand\subsubsectionformat{}
+\newlength\savewidth
+\newcommand\shline{\noalign{\global\savewidth\arrayrulewidth
+                            \global\arrayrulewidth 1.5pt}%
+                   \hline
+                   \noalign{\global\arrayrulewidth\savewidth}}
+
+\font\tenrm=cmr8 scaled \magstep1
+\renewcommand\baselinestretch{1.17}
+%\parindent 7mm\font\tenrm=cmr8 scaled \magstep1
+%\TagsOnRight
+\newtheorem{assumption}{~~~~~假设}[section]
+\newtheorem{lemma}{~~~~~引理}[section]
+\newtheorem{example}{~~~~~例}[section]
+\newtheorem{definition}{~~~~~定义}[section]
+\newtheorem{algorithm}{~~~~~算法}[section]
+\newtheorem{theorem}{~~~~~定理}[section]
+\newtheorem{corollary}{~~~~~推论}[section]
+\newtheorem{proposition}{~~~~~性质}[section]
+\newtheorem{remark}{~~~~~注}[section]
+%\newtheorem{fact}{Theorem}
+%\newtheorem{claim}{Claim}
+%\newtheorem{case}{Case}
+%\newtheorem{thm}{~~~~~~Theorem}
+%\newtheorem{word}[fact]{Definition}
+%\newtheorem{prop}[fact]{~~~~~~Proposition}
+%\newtheorem{obs}{Observation}
+
+%\newtheorem{lem}{~~~~~~Lemma}
+%\newtheorem{rem}{Remark}
+\newcommand{\nii}{\noindent}
+\newcommand{\nn}{\nonumber}
+\newcommand{\be}{\begin{equation}}
+\newcommand{\ee}{\end{equation}}
+\newcommand{\ba}{\begin{array}}
+\newcommand{\ea}{\end{array}}
+\newcommand{\bea}{\begin{eqnarray}}
+\newcommand{\eea}{\end{eqnarray}}
+
+\def\theotheorem{A\arabic{otheorem}}
+\def\geq{\geqslant}\def\leq{\leqslant}
+\def\ge{\geqslant}\def\le{\leqslant}
+\def\dsum{\displaystyle\sum}
+\begin{document}
+\input{abstract}
+\input{sec1_introduction}
+\input{sec3_systemdesign}
+\end{document}

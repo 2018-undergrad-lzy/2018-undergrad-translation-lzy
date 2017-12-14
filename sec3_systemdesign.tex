@@ -1,0 +1,122 @@
+
+
+
+\normalsize \setcounter{section}{2}
+\section{\zihao{-4}系统设计}
+
+\subsection{概述}
+\textbf{Platforms}
+The Iron system consists of a single trusted authority (Authority) platform and arbitrarily many decryption node platforms, which may be added dynamically. Both the trusted authority and decryption node platforms are Intel SGX enabled. Just as in a standard FE system, the trusted authority has the role of setting up public parameters as well as distributing functional secret keys, or the credentials required to decrypt functions of ciphertexts. A client application, which does not need to run on an Intel SGX enabled platform, will interact once with the trusted authority in order to obtain authorization for a function and will then interact with a decryption node in order to perform functional decryptions of ciphertexts.
+
+{\color{blue}\textbf{平台}\qquad Iron系统由一个可信的授权平台和任意多的可以动态添加的解密节点平台组成。可信授权平台和解密节点平台都应用Intel SGX技术。就像在标准的FE系统中一样，这个受信任的授权平台有设置公共参数，分发函数密钥和分发解密密文函数所需的认证的作用。一个不需要在Intel SGX 启用平台上运行的客户端应用程序将与授权平台进行交互，以获得对某个函数的授权，然后与解密节点平台进行交互，以执行对密文的函数解密。}
+
+\textbf{Protocol flow}
+The public parameters that the Authority platform generates will consists of a public encryption key for a public key cryptosystem and a public verification key for a cryptographic signature scheme. Ciphertexts are encrypted using the public encryption key. The functional secret keys that the Authority platform issues to client applications are signatures on function descriptions. Leveraging remote attestation, the Authority platform provisions the secret decryption key to a special enclave on the decryption node. When a client application sends a ciphertext, function description, and valid signature to the decryption node, an enclave with access to the secret key will check the signature, decrypt the ciphertext, run the function on the plaintext, and output the result. The enclave will abort on invalid signatures.
+
+{\color{blue}\textbf{协议流}\qquad 授权平台生成的公共参数包括，一个公钥加密系统的加密公钥，以及用于加密签名方案的认证公钥。密文使用加密公钥加密。授权平台交给客户端应用程序的函数密钥是在函数描述上的签名。利用远程认证，授权平台将解密密钥交给在解密节点上的一个特殊的飞地。当客户端应用程序向解密节点发送密文、函数描述和有效签名时，带有认证密钥的飞地将检查签名，解密密文，在明文上运行函数，并输出结果。飞地将中止无效的签名的操作。}
+
+\textbf{Function interpretation}
+The simplest design is to have a single decryption enclave on the decryption node obtain the secret decryption key, check function signatures, and perform functional decryption. However, this would require interpreting a logical description of the function inside the enclave. By design, native code cannot be moved into an SGX enclave after initialization.1 This is reasonable for simple functions, but could greatly impact performance for more complex functions. Moreover, it is an additional challenge to implement a general purpose interpreter that will be robust to side-channel attacks and will not leak sensitive information through its access pattern to external memory.
+
+{\color{blue}\textbf{函数解释}\qquad 最简单的设计是在解密节点上有一个解密飞地，它获得解密密钥，检查函数签名，并执行函数解密。然而，这需要解释飞地内部的函数逻辑描述。由于设计原因，本地代码在初始化后不能转移到SGX飞地。这对于简单的函数来说是合理的，但是对于更复杂的函数来说可能会有很大的影响。此外，实现合适的通用解释器也是个的挑战，它需要对旁路攻击由较强的鲁棒性，并且不会由它的访问模式向外部内存泄漏敏感信息。}
+
+\textbf{Function enclaves}
+An alternative design, which we implement in this work, circumvents the need for running an interpreter inside an enclave by taking advantage of local attestation, which already provides a way for one enclave to verify the code running in another. The function code is loaded into a separate function enclave on the same platform that locally attests to the decryption enclave. Instead of signing the description of a function, the Authority platform signs the report that the function enclave will generate in local attestation. A tradeoff of this design is that every authorized function runs in a separate enclave. This has little impact on applications that run a few functions on many ciphertexts. However, a client application that decrypts many functions of a ciphertext will have to create a new enclave for each computation, which is a relatively expensive operation. In fact, we demonstrate in our evaluation (Section 5) that for a simple functionality like Identity Based Encryption (IBE) interpreting the function (i.e. identity match) in an enclave is an order of magnitude faster.
+
+{\color{blue}\textbf{函数飞地}\qquad 我们在工作中采用的另一种设计利用了本地认证，避免了需要在一个飞地中运行一个解释器的问题，本地认证已经为飞地提供了验证代码在另一个飞地运行的方法。函数代码被加载到同一个平台上另一个已本地认证到解密飞地的函数飞地。授权平台不再生成函数描述，而是生成“此函数飞地将在本地认证中产生”的报告。这个设计的权衡之处在于，每个授权函数都在一个单独的飞地中运行。这对在大量密文中运行少量函数的应用程序几乎没有影响，但是对同一密文运行大量解密函数的应用程序必须为每个计算创建一个新的飞地，操作相对昂贵。事实上，我们在我们的评估(第5节)中演示对于一个简单的函数，比如基于身份的加密，在飞地上解释函数(如身份匹配)快了一个数量级。}
+
+\subsection{结构}
+
+\subsubsection{受信授权机构}
+
+The Authority platform runs a secure enclave called the key manager enclave (KME) and has three main protocols: setup, function authorization, and decryption key provisioning.
+
+{\color{blue}授权平台运行一个名为密钥管理飞地(KME)的安全飞地，并有三个主要的协议:设置、函数授权和提供解密密钥。}
+\textbf{Setup}
+The KME generates a public/private key pair (pk$_{pke}$,sk$_{pke}$) for a CCA2 secure public key cryptosystem and a verification/signing key pair (vk$_{sign}$,sk$_{sign}$) for a cryptographic signature scheme. The keys pk$_{pke}$ and vk$_{sign}$ are published while the keys sk$_{pke}$ and sk$_{sign}$ are sealed with the KME’s sealing key and kept in non-volatile storage.
+
+{\color{blue}\textbf{设置}\qquad KME生成一对用于CCA2安全的公钥密码系统公私密钥对(pk$_{pke}$,sk$_{pke}$)，和一对密码签名方案的认证/签名密钥对(vk$_{sign}$,sk$_{sign}$)。公钥pk$_{pke}$和vk$_{sign}$对外公布，私钥sk$_{pke}$和sk$_{sign}$用KME的密封密钥密封，并保存在非易失性存储中。}
+
+\textbf{Function authorization}
+In order to authorize a client application to perform functional decryption for a particular function f, i.e. issue the “secret key” sk$_{f}$ for f, the Authority provides the client application with a signature on f using the signing key sk$_{sign}$. Since sk$_{sign}$ is only known to the KME, the Authority uses the KME to produce this signature. The function f will be represented as an enclave program called a function enclave, which we will describe in more detail. The Authority signs the MRENCLAVE value in the report of this enclave (created by the EREPORT instruction), which identifies the code and static data that was loaded into the enclave upon initialization. Crucially, this value will be the same when generated by an instance of the same function enclave program running on any other SGX-enabled platform.
+
+{\color{blue}\textbf{函数授权}\qquad 为了授权客户端应用程序对一个特定的函数f执行函数解密，即发出f的“密钥”sk$_{f}$，授权机构给客户端应用程序提供一个f的签名，并使用签名密钥sk$_{sign}$。由于只有KME知道sk$_{sign}$，所以授权机构用KME来生成这个签名。函数f将被表示为一个被称为“函数飞地”的飞地程序，之后我们将更详细地描述这个程序。授权机构在这个飞地的报告中标识了MRENCLAVE的值，这个飞地由EREPORT指令创建，MRENCLAVE的值标识了在初始化时加载到飞地的代码和静态数据。重要的是，这个值将与在任何其他支持sgx的平台上运行的同一个函数飞地程序实例生成的值相同。}
+
+\textbf{Decryption key provisioning }
+When a new decryption node is initialized, the KME will establish a secure channel with a decryption enclave (DE) running on the decryption node SGX-enabled platform. The KME receives from the decryption node a remote attestation, which demonstrates that the decryption node is running the expected DE software and that the DE has the correct signature verification key vk$_{sign}$. The remote attestation also establishes a secure channel, i.e. contains a public key generated inside the DE. After verifying the remote attestation, the KME sends sk$_{pke}$ to the DE over the established secure channel, and authenticates this message by signing it with sk$_{sign}$.
+
+{\color{blue}\textbf{提供解密密钥}\qquad 当一个新的解密节点被初始化时，KME将建立一个安全通道，该通道另一端连接在一个解密飞地(DE)上，该解密飞地是在解密节点sgx平台上运行的。KME从解密节点接收到一个远程认证，这表明解密节点运行的是预期的DE软件程序，而DE拥有正确的签名验证密钥vk$_{sign}$。 远程认证也建立了一个安全通道，即包含在DE内部生成的公钥，验证远程认证后，KME通过已建立的安全通道将sk$_{pke}$发送到DE，并通过sk$_{sign}$ 对该消息进行验证。}
+
+\textbf{Authenticating KME’s message}
+At this point, it is not at all obvious why the KME needs to sign its message to the DE. Indeed, since sk$_{pke}$ is encrypted, it seems that there isn’t anything a man-in-the-middle attacker could do to harm security. If the message from the KME to the DE is replaced, the decryption node platform will simply fail to decrypt ciphertexts encrypted under pk$_{pke}$. However, it turns out that authenticating the KME’s messages is necessary for our formal proof of security to work (see Section 7).
+
+{\color{blue}\textbf{验证KME的信息}\qquad 为什么KME需要在交给DE的消息上签名这一点并不明显，因为sk$_{pke}$是加密的，似乎并没有中间人攻击可以影响其安全性。如果从KME到DE的消息被替换，那么显然解密节点平台将无法解密在pk$_{pke}$下加密的密文。然而事实证明，验证KME的消息对于我们正式的安全工作证明来讲是必要的(参见第7节)。}
+
+\textbf{Why run the key manager in an enclave?}
+Since the Authority is already trusted to authorize functions, one might wonder why we chose to have an enclave generate and manage keys rather than the Authority itself. Hiding these secret keys from the Authority does not reduce any trust assumptions since the Authority can use the KME to sign any function of its choice and therefore authorize itself to decrypt any ciphertext. The reason for running the KME in an enclave is to create a separation between the protocols that inherently involve the Authority and those that do not. In particular, since the KME could be run on an entirely separate untrusted platform, the protocol that provisions the decryption key sk$_{pke}$ to decryption nodes does not need to involve the Authority at all. This is an important separation. In the standard notion of a functional encryption scheme, decryption does not require interaction with the Authority. While the Authority is trusted to generate public parameters and to distribute functional secret keys, it could not, for example, suddenly decide to prevent a particular client from using a decryption key that is has already received. Additionally, managing keys inside an enclave offers better storage protection of keys (i.e. functions as an HSM).
+
+{\color{blue}\textbf{为什么要在飞地运行密钥管理机构?}\qquad 由于授权机构已受信任并可以授权函数，有人可能会想，为什么我们选择用一个独立的飞地生成和管理密钥，而不是授权机构本身？对授权机构隐瞒这些密钥并不会减少任何信任假设，因为授权机构可以运行KME来标记其选择的任何函数，因此可以授权自己对任何密文进行解密。在另一个飞地上运行KME的原因是要分离那些本质上与授权机构相关联的协议和其他协议。特别是由于KME可以在一个完全独立的不可信平台上运行，所以为解密节点提供解密密钥sk$_{pke}$ 的协议根本不需要涉及授权机构。这个分离很重要。在函数加密方案的标准概念中，解密不需要与授权机构的交互。虽然授权机构受信任，生成公共参数并分发函数密钥，但它不能实现例如突然决定阻止某个特定客户使用已经收到的解密密钥的操作。此外，在飞地内管理密钥可以更好地存储密钥(例如HSM的功能)。}
+
+\subsubsection{解密节点}
+A decryption node runs a single instance of the decryption enclave (DE). It will also receive requests from clients to run function enclaves. If properly authorized, a function enclave will be able to decrypt ciphertexts, run a particular function on the decrypted plaintext, and output the result encrypted under the client’s key. For remote clients, the function enclave can also produce a remote attestation to demonstrate the integrity of the output.
+
+{\color{blue}解密节点运行解密飞地(DE)的单独实例。它还接收客户端运行函数飞地的请求。如果得到授权，函数飞地将解密密文，对解密的明文运行特定的函数，并用客户端的密钥加密输出结果。对于远程客户端，这个函数飞地也可以生成一个远程认证来证明输出的完整性。}
+
+\textbf{Decryption Enclave}
+When the DE is initialized it is given the public verification key vk$_{sign}$. It remote attests to the KME, and includes vk$_{sign}$ in the attestation. A secure channel is also established within the attestation (i.e. the attestation contains a public key generated inside the DE), and the DE receives back the decryption key sk$_{pke}$ over this secure channel. The DE has the role of transferring the secret decryption key to authorized programs running within enclaves on the same platform, which we refer to as function enclaves. The DE will verify the code running inside a function enclave via local attestation. Specifically, it receives a KME signature on the function enclave’s MRENCLAVE value, which it will verify using vk$_{sign}$, and check this against the MRENCLAVE value in the function enclave’s local attestation report. This ensures that the trusted authority has authorized the function enclave. The local attestation also establishes a secure channel from the DE to the function enclave (i.e. contains a public key generated inside the function enclave). If the verifications of the local attestation and the signature pass, then the DE transfers sk$_{pke}$ to the function enclave over the secure channel. The DE also authenticates its message to the function enclave by wrapping it inside its own local attestation report.
+
+{\color{blue}\textbf{解密飞地(DE)}\qquad 当DE被初始化时，它接收认证公钥vk$_{sign}$，与KME进行远程认证，认证书中包含vk$_{sign}$。认证书也建立了一个安全通道(认证书包含DE生成的公钥)，而DE将通过这个安全通道接收解密密钥sk$_{pke}$。DE的作用是将解密密钥转移到在同一个平台的飞地运行的授权程序，我们称之为函数飞地。DE将通过本地认证验证在函数飞地内运行的代码。具体来说，DE接收到有关此函数飞地的MRENCLAVE值的KME签名，用vk$_{sign}$ 进行验证，并对函数飞地本地认证书中的MRENCLAVE值进行检查，以确保受信授权机构已经授权给了此函数飞地。本地认证书还建立了从DE到函数飞地的安全通道(包含函数飞地内部生成的公钥)。如果本地认证和签名通过，则DE将sk$_{pke}$通过该安全通道转移到函数飞地。DE还通过将信息包装在本地认证书中的方式来验证其交给函数飞地的信息。}
+
+\textbf{Function Enclaves}
+Ultimately, functional decryption for a particular function f is performed inside a function enclave that loads the function upon initialization. A client application authorized to decrypt f can operate the function enclave either locally or remotely. If the application is running locally on the decryption node, then it can directly call into the function enclave, providing as input a vector of ciphertexts and a signature. A remote client application will need to establish a secure channel with the enclave via remote attestation. A valid ciphertext input must be an encryption under the key pk$_{pke}$ and a valid signature input must be a signature on the function enclave’s MRENCLAVE value produced with sk$_{sign}$, the KME’s signing key. After receiving the inputs, the function enclave local attests to the DE and includes the signature input. If the signature input was valid, the function enclave will receive back sk$_{pke}$ over a secure channel established in the local attestation. The message it receives back will be authenticated with a local attestation report from the DE, which it must verify. It then uses sk$_{pke}$ to decrypt the ciphertexts, passes the vector of decrypted plaintexts as input to the client-defined function and records the output. In the case of a local client application, the output is returned directly to the application. In the case of a remote client application, the enclave encrypts the output with the session key it established with the client.
+
+{\color{blue}\textbf{函数飞地}\qquad 最终，对于特定函数f的函数解密在函数飞地内执行。函数飞地在初始化时加载函数。已被授权解密f的客户端应用程序可以在本地或远程操作该函数飞地。如果应用程序正在解密节点上本地运行，则其可以直接调用该函数飞地，输入密文的向量和签名。远程客户端应用程序需要通过远程认证建立安全通道。有效的密文输入必须是由密钥pk$_{pke}$加密的密文，而有效的签名输入必须是这个函数飞地的MRENCLAVE值用KME的签名密钥sk$_{sign}$生成的。接收到输入后，函数飞地与DE本地认证，认证包含签名输入。如果签名输入是有效的，则该函数飞地将通过本地认证建立的安全通道接收sk$_{pke}$。 它接收到的消息必须通过来自DE的本地认证书进行验证。然后函数飞地使用sk$_{pke}$对密文进行解密，将解密的明文向量作为输入运行客户定义的函数，并记录输出。对于本地客户机应用，输出直接返回到应用。对于远程客户端应用，飞地通过与客户端建立的会话密钥对输出进行加密。}
+
+\subsection{协议}
+
+Here we provide an informal summary of how the Iron system, as described above in 3.2, realizes each of the four functional encryption protocols FE.Setup, FE.Encrypt, FE.Keygen and FE.Decrypt. These protocols will be redescribed formally (for the purpose of security proofs) in 7 and at the implementation detail level in 4.
+
+{\color{blue}我们在这里提供一个非正式的总结，介绍了在3.2节中描述的Iron系统如何实现四个函数加密协议FE.Setup, FE.Encrypt, FE.Keygen和FE.Decrypt。我们将在第7节和第4节的实现细节级别重新正式描述这些协议(为了安全证明)。}
+
+\textbf{FE.Setup}
+The trusted platform runs the KME setup as described in 3.2 and publishes the public key pk$_{pke}$ and the verification key vk$_{sign}$. A handle to the KME’s signing function call, which produces signatures using sk$_{sign}$, serves as the trusted authority’s master secret key.
+
+\textbf{FE.Setup}
+{\color{blue}可信平台如3.2所述运行KME设置，并发布公钥pk$_{pke}$和认证密钥vk$_{sign}$。调用KME的签名函数的操作使用sk$_{sign}$生成签名，充当受信任授权机构的主密钥。}
+
+\textbf{FE.Keygen}
+The Authority receives a request from a client to authorize a function f. The requested function is wrapped in a function enclave source file enclave$_{f}$. The trusted platform compiles the enclave source and generates an attestation report for the enclave including the MRENCLAVE value mrenclave$_{f}$. It then uses the KME signing handle to sign mrenclave$_{f}$ using sk$_{sign}$. The signature sig$_{f}$ is returned to the client.
+
+\textbf{FE.Keygen}
+{\color{blue}授权机构从客户端接收到授权函数f的请求，请求的函数被包装在一个函数飞地源文件enclave$_{f}$中。可信平台编译飞地源文件，并为飞地生成认证书，包括MRENCLAVE的值MRENCLAVE$_{f}$。然后使用KME签名操作用sk$_{sign}$给mrenclave$_{f}$签名。签名sig$_{f}$返回给客户端。}
+
+\textbf{FE.Encrypt}
+Inputs are encrypted with pk$_{pke}$ using a CCA2 secure public key encryption scheme.
+
+\textbf{FE.Encrypt}
+{\color{blue}加密过程输入采用CCA2公钥加密方案，密钥为pk$_{pke}$。}
+
+\textbf{FE.Decrypt}
+Decryption begins with a client application connecting to a decryption node that has already been provisioned with the decryption key sk$_{pke}$ as described in 3.2. The client application may also run locally on the decryption node. The following steps ensue:
+
+{\color{blue}解密过程开始时，客户端应用程序连接到一个解密节点，如3.2所述，该节点已经被分配使用解密密钥sk$_{pke}$。客户端应用程序也可以在解密节点上本地运行。之后的步骤如下:}
+
+1. If this is the client’s first request to decrypt the function f, the client sends the function enclave source file enclave$_{f}$ to the decryption node, which the decryption node then compiles and runs. (A local client application would just run enclave$_{f}$).
+
+{\color{blue}如果这是客户端第一个对函数f进行解密的请求，则客户端将函数飞地源文件enclave$_{f}$发送到解密节点，解密节点随后编译并运行。(本地客户机应用程序只运行enclave$_{f}$)。}
+
+2. The client initiates a key exchange with the function enclave, and receives a remote attestation that it has successfully established a secure channel with an Intel SGX enclave running enclave$_{f}$. (Local client applications skip this step).
+
+{\color{blue}客户端启动与这个函数飞地的密钥交换，并接收一个远程认证，该认证说明已成功建立与安全通道运行enclave$_{f}$的Intel SGX飞地的通道。(本地客户机应用程序跳过这一步)。}
+
+3. The client sends over the established secure channel a vector of ciphertexts and the KME signature sig$_{f}$ that it obtained from the Authority in FE.Keygen.
+
+{\color{blue}客户端通过已建立的安全通道发送密文矢量和它从FE.Keygen获得的KME签名sig$_{f}$。}
+
+4. The function enclave locally attests to the DE and passes sig$_{f}$. The DE validates this signature against vk$_{sign}$ and the MRENCLAVE value mrenclave$_{f}$, which it obtains during local attestation. If this validation passes, the DE delivers the secret key sk$_{pke}$ to the function enclave, which uses it to decrypt the ciphertexts and compute f on the plaintext values. The output is returned to the client application over the function enclave’s secure channel with the client application.
+
+{\color{blue}该函数飞地在本地对DE进行测试，并传递sig$_{f}$。DE检验了该签名与vk$_{sign}$和MRENCLAVE值mrenclave$_{f}$是否对应，mrenclave$_{f}$ 本地认证中得到。如果验证通过，DE将密钥sk$_{pke}$交付给该函数飞地，它使用sk$_{pke}$来解密密文并对明文计算f。输出将通过函数飞地和客户端之间的安全通道返回给客户端应用程序。}
+
+
+
+

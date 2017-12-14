@@ -1,0 +1,34 @@
+
+
+
+ \renewcommand{\theequation}{\thesection.\arabic{equation}}
+    \setcounter{equation}{0}
+    \setcounter{subsection}{0}
+
+\newenvironment{proof}{\noindent{\bf Proof }}
+
+\newcommand{\ged}{\rule{2mm}{4.5mm}}
+\newcommand{\jo}[1]{\overline{#1}}
+\newcommand{\vb}{Varepsilon}
+\def\d{\displaystyle}
+
+\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+\setcounter{page}{1}
+
+
+%\footnotetext{收稿日期: ？？？？年？月？日} ~\vskip 1mm
+
+\centerline{\Large\heiti\bf Iron: 基于Intel SGX 的函数加密系统}
+
+ \vskip5mm
+\centerline{\large\fangsong Ben A Fisch, Dhinakaran Vinayagamurthy, Dan Boneh, Sergey Gorbunov}
+\vskip5mm
+
+\centerline{\large\fangsong 斯坦福大学，滑铁卢大学}
+
+\centerline{\large\fangsong benafisch@gmail.com, dvinayag@uwaterloo.ca, dabo@cs.stanford.edu, sgorbunov@uwaterloo.ca}
+
+  \vskip 5mm {\narrower\small \baselineskip 15pt
+
+{\heiti 摘\hspace{1em}要：\kaishu 函数加密(FE)是一种非常强大的加密机制，可以让已被授权的用户对加密数据进行计算，并且清楚地得到结果。然而，当前所有的常规FE的加密实例可行性都比较差。我们使用Intel最近的软件防护扩展(SGX)构建了一个实际可用的FE系统--Iron。我们证明，Iron可以应用于复杂的功能，甚至是实现简单功能时，表现也优于最知名的的加密方案。我们通过在硬件元件的环境中对FE建模来论证其安全性，并证明Iron满足安全模型。}
+
